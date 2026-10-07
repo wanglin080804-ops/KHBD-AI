@@ -1,0 +1,6 @@
+{
+  "name": "Trợ Lý AI - Soạn KHBD & Ma Trận",
+  "description": "Hệ thống AI hỗ trợ giáo viên tạo Kế hoạch bài dạy (CV 5512) và Ma trận đề kiểm tra (CV 7991) tự động, chuẩn GDPT 2018.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

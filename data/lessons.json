@@ -1,0 +1,69 @@
+{
+  "Ngữ văn": {
+    "Lớp 6": [
+      "Bài 1: Tôi và các bạn",
+      "Bài 2: Gõ cửa trái tim",
+      "Bài 3: Yêu thương và chia sẻ",
+      "Bài 4: Quê hương yêu dấu",
+      "Bài 5: Những nẻo đường xứ sở",
+      "Bài 6: Chuyện kể về những người anh hùng",
+      "Bài 7: Thế giới cổ tích",
+      "Bài 8: Khác biệt và gần gũi",
+      "Bài 9: Trái Đất – Ngôi nhà chung",
+      "Bài 10: Cuốn sách tôi yêu"
+    ],
+    "Lớp 9": [
+      "Bài 1: Thế giới kì ảo",
+      "Bài 2: Những cung bậc tâm trạng",
+      "Bài 3: Hồn nước nằm trong tiếng mẹ cha",
+      "Bài 4: Khám phá vẻ đẹp văn chương",
+      "Bài 5: Đối diện với nỗi đau",
+      "Bài 6: Giải mã những bí ẩn",
+      "Bài 7: Hồn thơ muôn điệu",
+      "Bài 8: Tiếng nói của cảnh vật",
+      "Bài 9: Khát vọng hoà bình",
+      "Bài 10: Tự học và trải nghiệm"
+    ]
+  },
+  "Công nghệ (Nông nghiệp/Trồng trọt)": {
+    "Lớp 10": [
+      "Bài 1: Giới thiệu về trồng trọt",
+      "Bài 2: Cây trồng và các yếu tố chính trong trồng trọt",
+      "Bài 3: Giới thiệu về đất trồng",
+      "Bài 4: Sử dụng, cải tạo và bảo vệ đất trồng",
+      "Bài 5: Giá thể trồng cây",
+      "Bài 7: Giới thiệu về phân bón",
+      "Bài 8: Sử dụng và bảo quản phân bón",
+      "Bài 9: Sử dụng công nghệ vi sinh trong sản xuất phân bón",
+      "Bài 11: Khái niệm và vai trò của giống cây trồng",
+      "Bài 12: Một số phương pháp chọn, tạo giống cây trồng",
+      "Bài 13: Nhân giống cây trồng",
+      "Bài 15: Sâu, bệnh hại cây trồng và ý nghĩa của việc phòng trừ",
+      "Bài 16: Một số sâu hại cây trồng thường gặp và biện pháp phòng trừ",
+      "Bài 17: Một số bệnh hại cây trồng thường gặp và biện pháp phòng trừ",
+      "Bài 18: Ứng dụng công nghệ vi sinh trong phòng trừ sâu, bệnh hại cây trồng",
+      "Bài 19: Quy trình trồng trọt và cơ giới hoá trong trồng trọt",
+      "Bài 20: Công nghệ cao trong thu hoạch và bảo quản sản phẩm"
+    ],
+    "Lớp 11": [
+      "Bài 1: Giới thiệu chung về chăn nuôi",
+      "Bài 2: Công nghệ giống vật nuôi",
+      "Bài 3: Công nghệ thức ăn chăn nuôi",
+      "Bài 4: Phòng, trị bệnh cho vật nuôi",
+      "Bài 5: Công nghệ chăn nuôi",
+      "Bài 6: Bảo vệ môi trường trong chăn nuôi"
+    ],
+    "Lớp 12": [
+      "Chương 1: Giới thiệu chung về Lâm nghiệp",
+      "Chương 2: Trồng và chăm sóc rừng",
+      "Chương 3: Bảo vệ và khai thác rừng",
+      "Chương 4: Giới thiệu chung về Thuỷ sản",
+      "Chương 5: Môi trường nuôi thuỷ sản",
+      "Chương 6: Thức ăn thuỷ sản",
+      "Chương 7: Giống thuỷ sản",
+      "Chương 8: Kĩ thuật nuôi thuỷ sản",
+      "Chương 9: Phòng, trị bệnh cho thuỷ sản",
+      "Chương 10: Bảo vệ và khai thác nguồn lợi thuỷ sản"
+    ]
+  }
+}
