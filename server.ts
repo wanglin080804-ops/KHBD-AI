@@ -168,7 +168,7 @@ Trình bày Markdown theo định dạng:
 - **NỘI DUNG TRÌNH CHIẾU CHO HS:**
   + [Nội dung chính, từ khóa, công thức - KHÔNG quá nhiều chữ]
   + [Câu hỏi/nhiệm vụ cụ thể]
-- **GỢI Ý HÌNH ẢNH:** [Mô tả chi tiết hình ảnh cần chèn để minh họa]
+- **GỢI Ý HÌNH ẢNH:** [Mô tả chi tiết hình ảnh cần chèn để minh họa. Nếu cung cấp link ảnh giả lập placeholder, tuyệt đối KHÔNG dùng via.placeholder.com, HÃY DÙNG placehold.co (ví dụ: https://placehold.co/600x400/png)]
 - **GHI CHÚ DÀNH CHO GIÁO VIÊN:**
   + [Lời dẫn: 2-3 câu ngắn, tự nhiên, dễ nói]
   + [Đáp án / Tiêu chí chấp nhận]

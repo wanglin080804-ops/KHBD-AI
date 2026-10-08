@@ -490,7 +490,7 @@ export default function App() {
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold tracking-wide uppercase mb-3 shadow-xs border border-indigo-100">
               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              Sản phẩm nộp bài tập 1
+              Công cụ hỗ trợ giảng dạy
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 bg-clip-text text-transparent">
               Trợ Lý AI Dành Cho Giáo Viên
@@ -505,18 +505,28 @@ export default function App() {
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <BookMarked className="w-3.5 h-3.5 text-indigo-500" />
-                Mẫu thử nghiệm nhanh cho Ban Giám Khảo & Giáo Viên:
+                Mẫu thử nghiệm nhanh:
               </span>
-              {history.length > 0 && (
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowHistoryModal(true)}
+                  onClick={() => setShowWelcomeModal(true)}
                   className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                 >
-                  <History className="w-3.5 h-3.5" />
-                  Lịch sử ({history.length})
+                  <Info className="w-3.5 h-3.5" />
+                  Hướng dẫn
                 </button>
-              )}
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHistoryModal(true)}
+                    className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    Lịch sử ({history.length})
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               {SAMPLE_PRESETS.map((p, idx) => (
@@ -559,7 +569,7 @@ export default function App() {
             <div className="mt-2.5 p-3 rounded-xl bg-gray-50/90 border border-dashed border-gray-300 flex flex-col gap-3 text-xs text-gray-600">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div className="flex items-center gap-1.5">
-                  <strong>API Test cho Ban Giám Khảo:</strong> 
+                  <strong>API Mặc Định (Hệ thống):</strong> 
                   <span className="opacity-70">🗝️ (Đã mã hóa bảo mật chuẩn sư phạm)</span>
                 </div>
                 <button
