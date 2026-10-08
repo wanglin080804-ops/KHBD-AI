@@ -169,9 +169,10 @@ export default function App() {
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setNotification({ message, type });
+    const duration = type === 'error' ? 8000 : 3500;
     setTimeout(() => {
       setNotification(null);
-    }, 3500);
+    }, duration);
   };
 
   const handleUseTestKey = () => {
@@ -479,7 +480,7 @@ export default function App() {
           notification.type === 'error' ? 'bg-red-600 text-white' :
           notification.type === 'info' ? 'bg-indigo-600 text-white' : 'bg-emerald-600 text-white'
         }`}>
-          <span>{notification.message}</span>
+          <span className="whitespace-pre-line leading-relaxed">{notification.message}</span>
         </div>
       )}
 

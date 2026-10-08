@@ -305,7 +305,17 @@ ${bookSetText}- Tên bài học / Chủ đề: ${lessonName}
   } catch (err: any) {
     console.error('Lỗi khi sinh nội dung:', err);
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    const msg = err?.message || 'Lỗi kết nối máy chủ hoặc API Key không hợp lệ.';
+    
+    let msg = err?.message || 'Lỗi kết nối máy chủ hoặc API Key không hợp lệ.';
+    const lowerMsg = msg.toLowerCase();
+    
+    if (lowerMsg.includes('429') || lowerMsg.includes('quota') || lowerMsg.includes('exhausted') || lowerMsg.includes('too many requests')) {
+      msg = '⚠️ HỆ THỐNG QUÁ TẢI HOẶC HẾT LƯỢT DÙNG MIỄN PHÍ!\n\n' +
+            '• Nếu do quá tải (vượt số lượt/phút): Sẽ tự động hồi lại sau 1 - 2 phút.\n' +
+            '• Nếu hết hạn mức ngày: Sẽ tự động hồi lại vào ngày mai.\n\n' +
+            '💡 Mẹo: Hãy tự nhập API Key của riêng bạn ở ô "Khóa bảo mật" để sử dụng ngay mà không bị giới hạn!';
+    }
+    
     return res.status(500).json({ error: msg });
   }
 });
