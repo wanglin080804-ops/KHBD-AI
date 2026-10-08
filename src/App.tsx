@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import katex from 'katex';
+import DOMPurify from 'dompurify';
+import { PDFDocument } from 'pdf-lib';
 import { 
   FileText, 
   Sparkles, 
@@ -24,7 +26,10 @@ import {
   HelpCircle,
   Clock,
   Layers,
-  ChevronDown
+  ChevronDown,
+  X,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 
 interface HistoryItem {
@@ -98,6 +103,22 @@ const SAMPLE_PRESETS = [
   }
 ];
 
+const slicePdf = async (file: File, start: number, end: number): Promise<File> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdfDoc = await PDFDocument.load(arrayBuffer);
+  const newPdf = await PDFDocument.create();
+  const startIndex = Math.max(0, start - 1);
+  const endIndex = Math.min(pdfDoc.getPageCount() - 1, end - 1);
+  const pageIndices = [];
+  for (let i = startIndex; i <= endIndex; i++) {
+    pageIndices.push(i);
+  }
+  const copiedPages = await newPdf.copyPages(pdfDoc, pageIndices);
+  copiedPages.forEach((page) => newPdf.addPage(page));
+  const pdfBytes = await newPdf.save();
+  return new File([pdfBytes as unknown as BlobPart], `sliced_${file.name}`, { type: 'application/pdf' });
+};
+
 export default function App() {
   // Form states
   const [apiKeyInput, setApiKeyInput] = useState<string>('');
@@ -108,6 +129,11 @@ export default function App() {
   const [bookSet, setBookSet] = useState<string>('Kết nối tri thức với cuộc sống');
   const [lessonName, setLessonName] = useState<string>('');
   const [extraContext, setExtraContext] = useState<string>('');
+  const [inputMode, setInputMode] = useState<'ai' | 'upload'>('ai');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [fileUrl, setFileUrl] = useState<string>('');
+  const [pageStart, setPageStart] = useState<string>('');
+  const [pageEnd, setPageEnd] = useState<string>('');
 
   // Auto-suggested lessons
   const [suggestedLessons, setSuggestedLessons] = useState<string[]>([]);
@@ -123,6 +149,9 @@ export default function App() {
   // History state
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+
+  // Welcome modal state
+  const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(true);
 
   const resultContainerRef = useRef<HTMLDivElement>(null);
 
@@ -170,7 +199,7 @@ export default function App() {
   };
 
   // Auto-fetch lessons when subject, grade, and bookSet change
-  const handleFetchLessons = async () => {
+  const handleFetchLessons = useCallback(async () => {
     if (!subject.trim() || !grade.trim()) return;
 
     let keyToSend = apiKeyInput.trim();
@@ -201,40 +230,70 @@ export default function App() {
     } finally {
       setIsLoadingLessons(false);
     }
-  };
+  }, [subject, grade, bookSet, apiKeyInput]);
+
+  // Reactively fetch lessons when subject/grade/bookSet change in AI mode
+  useEffect(() => {
+    if (inputMode === 'ai' && subject.trim() && grade.trim()) {
+      const debounceTimer = setTimeout(() => {
+        handleFetchLessons();
+      }, 300);
+      return () => clearTimeout(debounceTimer);
+    }
+  }, [subject, grade, bookSet, inputMode, handleFetchLessons]);
 
   // Convert markdown + KaTeX LaTeX formulas
   const renderFormattedContent = (markdownText: string) => {
     if (!markdownText) return '';
 
+    const mathTokens: string[] = [];
+    
     // Replace display formulas $$...$$
     let textWithMath = markdownText.replace(/\$\$([\s\S]+?)\$\$/g, (_match, formula) => {
       try {
-        return katex.renderToString(formula.trim(), { displayMode: true, throwOnError: false });
+        const html = katex.renderToString(formula.trim(), { displayMode: true, throwOnError: false });
+        mathTokens.push(html);
+        return `MATHTOKENPLACEHOLDER${mathTokens.length - 1}END`;
       } catch {
-        return formula;
+        return _match;
       }
     });
 
     // Replace inline formulas $...$
     textWithMath = textWithMath.replace(/\$([^\$\n\r]+?)\$/g, (_match, formula) => {
       try {
-        return katex.renderToString(formula.trim(), { displayMode: false, throwOnError: false });
+        const html = katex.renderToString(formula.trim(), { displayMode: false, throwOnError: false });
+        mathTokens.push(html);
+        return `MATHTOKENPLACEHOLDER${mathTokens.length - 1}END`;
       } catch {
-        return formula;
+        return _match;
       }
     });
 
+    let html = '';
     try {
-      return marked.parse(textWithMath, { async: false, breaks: true }) as string;
+      html = marked.parse(textWithMath, { async: false, breaks: true }) as string;
     } catch {
-      return marked.parse(markdownText, { async: false, breaks: true }) as string;
+      html = marked.parse(markdownText, { async: false, breaks: true }) as string;
     }
+
+    // Restore math tokens
+    mathTokens.forEach((tokenHtml, index) => {
+      html = html.replace(`MATHTOKENPLACEHOLDER${index}END`, tokenHtml);
+    });
+
+    return html;
   };
+
+
 
   const handleGenerate = async () => {
     if (!subject.trim() || !grade.trim() || !lessonName.trim()) {
       showToast("Vui lòng điền đầy đủ Môn học, Khối Lớp và Tên bài học!", "error");
+      return;
+    }
+    if (inputMode === 'upload' && !uploadFile) {
+      showToast("Vui lòng tải lên tài liệu!", "error");
       return;
     }
 
@@ -247,18 +306,37 @@ export default function App() {
     setIsEditMode(false);
 
     try {
+      const formData = new FormData();
+      formData.append('taskType', taskType);
+      formData.append('subject', subject.trim());
+      formData.append('grade', grade.trim());
+      formData.append('bookSet', bookSet.trim());
+      formData.append('lessonName', lessonName.trim());
+      formData.append('extraContext', extraContext.trim());
+      formData.append('apiKey', keyToSend);
+      formData.append('inputMode', inputMode);
+
+      if (inputMode === 'upload' && uploadFile) {
+        if (uploadFile.name.toLowerCase().endsWith('.pdf') && (pageStart || pageEnd)) {
+          const start = pageStart ? parseInt(pageStart) : 1;
+          const end = pageEnd ? parseInt(pageEnd) : start;
+          if (start > 0 && end >= start) {
+            const slicedFile = await slicePdf(uploadFile, start, end);
+            formData.append('file', slicedFile);
+          } else {
+             throw new Error("Trang bắt đầu và kết thúc không hợp lệ");
+          }
+        } else {
+          formData.append('file', uploadFile);
+          if (pageStart && pageEnd) {
+             formData.append('pageRange', `Từ trang ${pageStart} đến trang ${pageEnd}`);
+          }
+        }
+      }
+
       const res = await fetch('/api/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskType,
-          subject: subject.trim(),
-          grade: grade.trim(),
-          bookSet: bookSet.trim(),
-          lessonName: lessonName.trim(),
-          extraContext: extraContext.trim(),
-          apiKey: keyToSend
-        })
+        body: formData
       });
 
       const data = await res.json();
@@ -478,20 +556,96 @@ export default function App() {
               }`}
             />
             
-            <div className="mt-2.5 p-3 rounded-xl bg-gray-50/90 border border-dashed border-gray-300 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-gray-600">
-              <div className="flex items-center gap-1.5">
-                <strong>API Test cho Ban Giám Khảo:</strong> 
-                <span className="opacity-70">🗝️ (Đã mã hóa bảo mật chuẩn sư phạm)</span>
+            <div className="mt-2.5 p-3 rounded-xl bg-gray-50/90 border border-dashed border-gray-300 flex flex-col gap-3 text-xs text-gray-600">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <strong>API Test cho Ban Giám Khảo:</strong> 
+                  <span className="opacity-70">🗝️ (Đã mã hóa bảo mật chuẩn sư phạm)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleUseTestKey}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-all shadow-xs hover:shadow flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                >
+                  🚀 Dùng API Test Mặc Định
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={handleUseTestKey}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-all shadow-xs hover:shadow flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-              >
-                🚀 Dùng API Test Mặc Định
-              </button>
+              <div className="bg-amber-50 text-amber-800 p-2.5 rounded-lg border border-amber-200/60 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold mb-1">Lưu ý khi sử dụng API Key:</p>
+                  <ul className="list-disc pl-4 space-y-1 opacity-90">
+                    <li>Người dùng có thể dùng trực tiếp Key có sẵn của Admin nhưng lưu ý đây là token free nên sẽ hạn chế về tốc độ phản hồi và số lượt tạo.</li>
+                    <li>Nếu người dùng có Key cá nhân, khuyến khích tự sử dụng Key cá nhân để đảm bảo trải nghiệm mượt mà và ổn định hơn.</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Input Mode Toggle */}
+          <div className="mb-5 flex gap-4">
+            <button 
+              type="button" 
+              onClick={() => setInputMode('ai')}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${inputMode === 'ai' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              ✨ Tự động sinh (AI)
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setInputMode('upload')}
+              className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${inputMode === 'upload' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+            >
+              📁 Upload Tài Liệu (PDF/Word)
+            </button>
+          </div>
+
+          {inputMode === 'upload' && (
+            <div className="mb-5 p-5 bg-indigo-50 rounded-xl border border-indigo-100">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Tải lên sách / tài liệu bài học (Hỗ trợ: .pdf, .doc, .docx)
+              </label>
+              <input 
+                type="file" 
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setUploadFile(file);
+                  // Revoke previous blob URL to prevent memory leak
+                  if (fileUrl) URL.revokeObjectURL(fileUrl);
+                  if (file && file.type === 'application/pdf') {
+                    setFileUrl(URL.createObjectURL(file));
+                  } else {
+                    setFileUrl('');
+                  }
+                }}
+                className="w-full mb-4 bg-white p-2 rounded border border-gray-300"
+              />
+              {fileUrl && (
+                <div className="mb-4 border border-gray-300 rounded-xl overflow-hidden shadow-sm h-[500px]">
+                  <div className="bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-600 border-b">
+                    👀 Xem trước nội dung PDF (Cuộn để xem số trang)
+                  </div>
+                  <iframe src={fileUrl} width="100%" height="100%" title="PDF Preview" />
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="flex-1 w-full">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Từ trang số</label>
+                  <input type="number" value={pageStart} onChange={e => setPageStart(e.target.value)} placeholder="VD: 15" className="w-full p-2 border rounded" />
+                </div>
+                <div className="flex-1 w-full">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Đến trang số</label>
+                  <input type="number" value={pageEnd} onChange={e => setPageEnd(e.target.value)} placeholder="VD: 18" className="w-full p-2 border rounded" />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                * Với PDF: Trình duyệt sẽ tự động cắt đúng số trang bạn nhập trước khi gửi để xử lý cực nhanh.<br/>
+                * Với Word: AI sẽ đọc nội dung từ trang bạn chỉ định.
+              </p>
+            </div>
+          )}
 
           {/* Document Type & Subject */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
@@ -522,7 +676,6 @@ export default function App() {
                 value={subject}
                 onChange={(e) => {
                   setSubject(e.target.value);
-                  setTimeout(handleFetchLessons, 100);
                 }}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white/90 text-gray-800 text-sm transition-all focus:outline-none focus:ring-3 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
               >
@@ -563,7 +716,6 @@ export default function App() {
                 value={grade}
                 onChange={(e) => {
                   setGrade(e.target.value);
-                  setTimeout(handleFetchLessons, 100);
                 }}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white/90 text-gray-800 text-sm transition-all focus:outline-none focus:ring-3 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
               >
@@ -591,7 +743,6 @@ export default function App() {
                 value={bookSet}
                 onChange={(e) => {
                   setBookSet(e.target.value);
-                  setTimeout(handleFetchLessons, 100);
                 }}
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white/90 text-gray-800 text-sm transition-all focus:outline-none focus:ring-3 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
               >
@@ -763,7 +914,7 @@ export default function App() {
             ) : (
               <div 
                 className="markdown-body bg-white/95 p-6 sm:p-8 rounded-2xl border border-gray-100 shadow-xs"
-                dangerouslySetInnerHTML={{ __html: renderFormattedContent(resultContent) }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderFormattedContent(resultContent), { USE_PROFILES: { mathMl: true, html: true } }) }}
               />
             )}
           </div>
@@ -848,6 +999,71 @@ export default function App() {
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm font-semibold rounded-xl transition-all cursor-pointer"
                 >
                   Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Welcome Instructions Modal */}
+        {showWelcomeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              <div className="p-5 bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-between text-white shrink-0">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-yellow-300" />
+                  Hướng dẫn sử dụng Trợ Lý AI
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowWelcomeModal(false)}
+                  className="p-1.5 text-white/80 hover:text-white hover:bg-white/20 rounded-lg transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto space-y-5 text-gray-700 text-sm">
+                <div>
+                  <h4 className="font-bold text-base text-gray-900 mb-2 flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-indigo-500" /> 1. Cách thức hoạt động
+                  </h4>
+                  <p className="leading-relaxed">
+                    Hệ thống giúp giáo viên tự động hóa việc biên soạn Kế hoạch bài dạy (KHBD), Ma trận đề kiểm tra và Kịch bản Slide. Dựa trên thông tin đầu vào (Môn học, Khối lớp, Tên bài, Bộ sách) kết hợp với công nghệ AI, hệ thống sẽ sinh ra kết quả phù hợp với các chuẩn của Bộ GD&ĐT.
+                  </p>
+                </div>
+
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
+                  <h4 className="font-bold text-indigo-800 mb-2 flex items-center gap-1.5">
+                    <Info className="w-4 h-4 text-indigo-600" /> 2. Lựa chọn nguồn dữ liệu (Khuyến cáo)
+                  </h4>
+                  <p className="mb-2">Hệ thống cung cấp 2 chế độ sinh dữ liệu:</p>
+                  <ul className="list-disc pl-5 space-y-1 text-indigo-900/80">
+                    <li><strong>Tự động sinh (AI):</strong> AI tự tổng hợp kiến thức từ kho dữ liệu đã được huấn luyện.</li>
+                    <li><strong>Upload Tài Liệu (PDF/Word):</strong> Giáo viên tải lên file sách giáo khoa/tài liệu tham khảo.</li>
+                  </ul>
+                  <p className="mt-2 font-semibold text-indigo-800">
+                    💡 Khuyến cáo: Giáo viên nên ưu tiên sử dụng chế độ "Upload Tài Liệu" và tải file sách lên để đảm bảo nội dung được sinh ra chính xác nhất, bám sát sách giáo khoa.
+                  </p>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                  <h4 className="font-bold text-amber-800 mb-2 flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" /> 3. Lưu ý về chức năng Tạo Slide
+                  </h4>
+                  <p className="text-amber-900/80 leading-relaxed">
+                    Chức năng "Tạo Slide" trên hệ thống hiện tại tập trung vào việc xây dựng <strong>kế hoạch/kịch bản phân bổ nội dung slide</strong>. Để có được một bài thuyết trình hoàn chỉnh, sinh động, quý thầy/cô vui lòng copy kịch bản này cho vào các trợ lý AI chuyên tạo Slide (như Gamma, Tome, Canva...) để AI xử lý thiết kế một cách chính xác và đẹp mắt hơn.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-gray-50 border-t border-gray-100 text-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowWelcomeModal(false)}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl transition-all cursor-pointer shadow-sm hover:shadow"
+                >
+                  Đã hiểu & Bắt đầu sử dụng
                 </button>
               </div>
             </div>

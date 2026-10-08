@@ -143,9 +143,9 @@ body {
   margin-bottom: 1.75rem;
   background: #ffffff;
   border-radius: 10px;
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  display: table;
+  display: block;
 }
 
 .markdown-body th, .markdown-body td {

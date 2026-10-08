@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
@@ -11,7 +12,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+
+const upload = multer({ dest: 'uploads/' });
 
 const OBFUSCATED_TEST_KEY = "d0c5ZENrUUdrUDVnS0ZObXlNTmx6Uk5WQm5aYnJhUy0wMWRzN0JNYWgxSUk2TlI4YkEuUUE=";
 
@@ -177,9 +180,12 @@ Trình bày Markdown theo định dạng:
 - Phân tách rõ nội dung chiếu lên màn hình và nội dung giáo viên cần nói.`;
 
 // API route: Generate Lesson Plan / Matrix
-app.post('/api/generate', async (req, res) => {
+
+
+app.post('/api/generate', upload.single('file'), async (req, res) => {
   try {
-    const { taskType, subject, grade, bookSet, lessonName, extraContext, apiKey: userKey } = req.body;
+    const { taskType, subject, grade, bookSet, lessonName, extraContext, apiKey: userKey, inputMode, pageRange } = req.body;
+    const uploadedFile = req.file;
 
     if (!subject || !grade || !lessonName) {
       return res.status(400).json({ error: 'Vui lòng cung cấp đầy đủ Môn học, Khối lớp và Tên bài học.' });
@@ -209,32 +215,96 @@ app.post('/api/generate', async (req, res) => {
     else if (isSlide) docTypeName = 'KỊCH BẢN SLIDE BÀI GIẢNG (PowerPoint)';
     else docTypeName = 'MA TRẬN VÀ BẢN ĐẶC TẢ ĐỀ KIỂM TRA (Theo Công văn 7991)';
 
-    const userPrompt = `Hãy soạn tài liệu giáo dục hoàn chỉnh cho giáo viên:
+    let userPrompt = `Hãy soạn tài liệu giáo dục hoàn chỉnh cho giáo viên:
 - Loại tài liệu: ${docTypeName}
 - Môn học: ${subject}
 - Khối lớp: ${grade}
 ${bookSetText}- Tên bài học / Chủ đề: ${lessonName}
-- Yêu cầu bổ sung đặc biệt từ giáo viên: ${extraContext ? extraContext : 'Soạn chi tiết, đầy đủ các hoạt động, thực tế, khả thi trong giảng dạy.'}
+- Yêu cầu bổ sung đặc biệt từ giáo viên: ${extraContext ? extraContext : 'Soạn chi tiết, đầy đủ các hoạt động, thực tế, khả thi trong giảng dạy.'}`;
 
-Yêu cầu thực hiện:
+    if (inputMode === 'upload' && uploadedFile) {
+       if (pageRange) {
+         userPrompt += `\n\nCHÚ Ý QUAN TRỌNG: Hãy CHỈ sử dụng nội dung từ file đính kèm (tập trung vào đoạn ${pageRange}) để soạn bài. Tuyệt đối bám sát nội dung file, không bịa thêm kiến thức ngoài.`;
+       } else {
+         userPrompt += `\n\nCHÚ Ý QUAN TRỌNG: Hãy sử dụng nội dung từ file đính kèm để soạn bài. Tuyệt đối bám sát nội dung file.`;
+       }
+    }
+
+    userPrompt += `\n\nYêu cầu thực hiện:
 1. Viết cực kỳ chi tiết, chỉn chu, chuyên nghiệp, không tóm tắt qua loa.
 2. Đúng mẫu biểu hiện hành của Bộ Giáo dục và Đào tạo Việt Nam.
 3. Sử dụng Markdown rõ ràng và công thức Toán/Khoa học (nếu có) bằng LaTeX kẹp giữa $...$ hoặc $$...$$.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: userPrompt,
-      config: {
-        systemInstruction: sysPrompt,
-        temperature: 0.7,
-        tools: [{ googleSearch: {} }],
-      },
-    });
+    console.log("Bat dau goi API tao noi dung...");
+    let aiContents: any = userPrompt;
+    
+    let uploadResult;
+    if (inputMode === 'upload' && uploadedFile) {
+       console.log("Dang upload file len Gemini API...");
+       uploadResult = await ai.files.upload({
+          file: uploadedFile.path,
+          config: {
+             mimeType: uploadedFile.mimetype,
+          }
+       });
+       console.log("Upload file thanh cong, uri:", uploadResult.uri);
+       aiContents = [
+           {
+               fileData: {
+                   mimeType: uploadResult.mimeType || uploadedFile.mimetype,
+                   fileUri: uploadResult.uri
+               }
+           },
+           userPrompt
+       ];
+    }
 
-    const text = response.text || '';
-    return res.json({ content: text });
+    const modelsToTry = ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-pro-latest'];
+    let responseStream;
+    let fullText = '';
+    let success = false;
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+        try {
+            console.log(`Dang thu model: ${modelName}...`);
+            responseStream = await ai.models.generateContentStream({
+              model: modelName,
+              contents: aiContents,
+              config: {
+                systemInstruction: sysPrompt,
+                temperature: 0.7,
+              },
+            });
+            
+            fullText = '';
+            for await (const chunk of responseStream) {
+                if (chunk.text) {
+                    fullText += chunk.text;
+                }
+            }
+            success = true;
+            console.log(`Goi generateContentStream thanh cong voi ${modelName}!`);
+            break; // Thoát khỏi vòng lặp nếu sinh thành công
+        } catch (err: any) {
+            console.warn(`Model ${modelName} that bai (co the do qua tai):`, err.message || err);
+            lastError = err;
+        }
+    }
+
+    if (!success) {
+        console.error("Tat ca cac model deu that bai.");
+        throw lastError;
+    }
+
+    if (uploadedFile && fs.existsSync(uploadedFile.path)) {
+       fs.unlinkSync(uploadedFile.path);
+    }
+
+    return res.json({ content: fullText });
   } catch (err: any) {
     console.error('Lỗi khi sinh nội dung:', err);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     const msg = err?.message || 'Lỗi kết nối máy chủ hoặc API Key không hợp lệ.';
     return res.status(500).json({ error: msg });
   }
@@ -280,7 +350,7 @@ Trả về DUY NHẤT một mảng JSON các chuỗi tên bài học (VD: ["Bài
 Tuyệt đối KHÔNG xuất thêm bất kỳ văn bản nào khác ngoài JSON, không dùng ký hiệu code block markdown.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-3.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -290,8 +360,13 @@ Tuyệt đối KHÔNG xuất thêm bất kỳ văn bản nào khác ngoài JSON,
 
     let raw = response.text || '[]';
     raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-    const lessons = JSON.parse(raw);
-    return res.json({ lessons: Array.isArray(lessons) ? lessons : [] });
+    try {
+      const lessons = JSON.parse(raw);
+      return res.json({ lessons: Array.isArray(lessons) ? lessons : [] });
+    } catch (parseErr) {
+      console.error('Lỗi parse JSON trong lessons:', parseErr, raw);
+      return res.json({ lessons: [] });
+    }
   } catch (err: any) {
     console.error('Lỗi khi tải danh sách bài học:', err);
     return res.status(500).json({ error: err?.message || 'Không thể tải danh sách bài học.' });
